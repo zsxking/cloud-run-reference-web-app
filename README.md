@@ -141,19 +141,7 @@ This step additionally creates a file named `env.mk` based on [env.mk.sample](en
 
 Address the TODO comment at the top of `env.mk` and ensure values are correct.
 
-### 3. Create a GKE Cluster
-
-Run `make cluster`
-
-### 4. Add a verified owner for the domain
-
-Add the following service account as an [additional verified owner][]:
-
-`cnrm-system@${PROJECT_ID}.iam.gserviceaccount.com`
-
-where `${PROJECT_ID}` is replaced by your Google Cloud project ID.
-
-### 5. Build and deploy
+### 3. Build and deploy
 
 Run `make build-all`.
 
@@ -177,12 +165,6 @@ npm run init-admin <email>
 ```
 
 ## Update the Application
-
-Running `make build-all` will rebuild and deploy the app, including any changes
-made to the infrastructure. Note that removing resources from `infrastructure-tpl.yaml`
-will not cause them to be deleted. You must either run `make delete` before removing
-the resource (then redeploy with `make build-all` after removing it), or manually
-delete the resource with `kubectl delete`.
 
 ```shell
 # builds and deploys backend, frontend, and KCC infrastructure

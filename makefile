@@ -133,7 +133,7 @@ build-userservice:
 	$(GCLOUD_BUILD) --config ./backend/user-service/cloudbuild.yaml --substitutions $(call join_subs,$(USER_SVC_SUBS))
 
 build-infrastructure:
-	# $(GCLOUD_BUILD) --config cloudbuild.yaml --substitutions $(call join_subs,$(INFRA_SUBS))
+	cd terraform && terraform apply -auto-approve
 
 build-infra: build-infrastructure
 
