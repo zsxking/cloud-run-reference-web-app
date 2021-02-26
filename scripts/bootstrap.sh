@@ -48,10 +48,10 @@ echo "Enabling Cloud Build, Kubernetes Engine, and Cloud Resource Manager APIs .
 gcloud --project "${PROJECT_ID}" services enable {cloudbuild,container,cloudresourcemanager}.googleapis.com & progress_indicator $!
 
 # Grant Cloud Build service account permissions
+# Cloud Run Admin, roles/run.admin
 # Service Account Admin, roles/iam.serviceAccountAdmin
 # Service Account Token Creator, roles/iam.serviceAccountTokenCreator
 # Service Account User, roles/iam.serviceAccountUser
-# Kubernetes Engine Admin, roles/container.admin
 # Project IAM Admin, roles/resourcemanager.projectIamAdmin
 # Compute Load Balancer Admin, roles/compute.loadBalancerAdmin
 # Compute Network Admin, roles/compute.networkAdmin
@@ -60,7 +60,7 @@ gcloud --project "${PROJECT_ID}" services enable {cloudbuild,container,cloudreso
 # Firebase Auth Admin, roles/firebaseauth.admin
 
 echo "Granting Cloud Build service account permissions ..."
-for role in iam.serviceAccount{Admin,TokenCreator,User} container.admin resourcemanager.projectIamAdmin compute.{loadBalancer,network,security}Admin firebaseauth.admin datastore.user; do
+for role in run.admin iam.serviceAccount{Admin,TokenCreator,User} resourcemanager.projectIamAdmin compute.{loadBalancer,network,security}Admin firebaseauth.admin datastore.user; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member serviceAccount:"${PROJECT_NUMBER}"@cloudbuild.gserviceaccount.com \
   --role roles/"${role}" \

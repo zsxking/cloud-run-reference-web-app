@@ -7,51 +7,25 @@ ifdef CB_MACHINE_TYPE
 	MACHINE_TYPE=--machine-type=$(CB_MACHINE_TYPE)
 endif
 
-# Shared cluster substitution args
-CLUSTER_ARGS = \
-	_CLUSTER_LOCATION=$(CLUSTER_LOCATION) \
-	_CLUSTER_NAME=$(CLUSTER_NAME) \
-	_NAMESPACE=$(NAMESPACE)
-
-# Shared istio substitution args
-ISTIO_ARGS = \
-	_ISTIO_INGRESS_NAMESPACE=$(ISTIO_INGRESS_NAMESPACE) \
-	_ISTIO_INGRESS_SERVICE=$(ISTIO_INGRESS_SERVICE)
+CR_ARGS = \
+	_CR_REGION=$(CR_REGION)
 
 # backend/cloudbuild.yaml
-BACKEND_SUBS = $(CLUSTER_ARGS) \
+API_SVC_SUBS = $(CR_ARGS) \
 	_BACKEND_IMAGE_NAME=$(BACKEND_IMAGE_NAME) \
-	_BACKEND_KSA=$(BACKEND_KSA) \
 	_BACKEND_SERVICE_NAME=$(BACKEND_SERVICE_NAME) \
 	_GIT_USER_ID=$(GIT_USER_ID) \
 	_GIT_REPO_ID=$(GIT_REPO_ID)
 
-BACKEND_TEST_SUBS = _GIT_USER_ID=$(GIT_USER_ID) \
+API_SVC_TEST_SUBS = _GIT_USER_ID=$(GIT_USER_ID) \
 	_GIT_REPO_ID=$(GIT_REPO_ID)
 
-USER_SVC_SUBS = $(CLUSTER_ARGS) \
+USER_SVC_SUBS = $(CR_ARGS) \
 	_USER_SVC_IMAGE=$(USER_SVC_IMAGE_NAME) \
-	_USER_SVC_KSA=$(USER_SVC_KSA) \
 	_USER_SVC_NAME=$(USER_SVC_NAME) \
 
 FRONTEND_E2E_SUBS = _DOMAIN=$(DOMAIN) \
 	_ARTIFACTS_LOCATION=$(TEST_ARTIFACTS_LOCATION)
-
-# cloudbuild.yaml
-INFRA_SUBS = $(CLUSTER_ARGS) $(ISTIO_ARGS) \
-	_BACKEND_GSA=$(BACKEND_GSA) \
-	_BACKEND_KSA=$(BACKEND_KSA) \
-	_BACKEND_SERVICE_HOST_NAME=$(BACKEND_SERVICE_HOST_NAME) \
-	_USER_SVC_KSA=$(USER_SVC_KSA) \
-	_USER_SVC_GSA=$(USER_SVC_GSA) \
-	_USER_SVC_HOST_NAME=$(USER_SVC_HOST_NAME) \
-	_DOMAIN=$(DOMAIN) \
-	_MANAGED_ZONE_NAME=$(MANAGED_ZONE_NAME) \
-	_SSL_CERT_NAME=$(SSL_CERT_NAME)
-
-# cloudbuild-provision-cluster.yaml
-PROVISION_SUBS = $(CLUSTER_ARGS) $(ISTIO_ARGS) \
-	_CLUSTER_GKE_VERSION=$(CLUSTER_GKE_VERSION)
 
 # webui/cloudbuild.yaml
 WEBUI_SUBS = _DOMAIN=$(DOMAIN)
@@ -125,19 +99,6 @@ test-backend-local: backend/api-service/src/api/openapi.yaml
 	cd backend/api-service/src && FIRESTORE_EMULATOR_HOST=localhost:9090 go test -tags=emulator -v
 	docker stop firestore-emulator
 
-FIREBASE_SA=$(shell gcloud --project=$(PROJECT_ID) iam service-accounts list --filter="displayName=firebase-adminsdk" --format="value(email)")
-test-istio-auth-local: jq
-	gcloud --project=$(PROJECT_ID) iam service-accounts keys create --iam-account=$(FIREBASE_SA) \
-		/tmp/istio-auth-test-key.json
-	cd istio-auth && API_KEY=$$(grep apiKey ../webui/firebaseConfig.ts | cut -d "'" -f2) \
-		HOST_IP=$$(kubectl -n $(ISTIO_INGRESS_NAMESPACE) get service $(ISTIO_INGRESS_SERVICE) -o jsonpath='{.status.loadBalancer.ingress[0].ip}') \
-		GOOGLE_APPLICATION_CREDENTIALS=/tmp/istio-auth-test-key.json \
-		go test -v || touch /tmp/istio-auth-test.failed
-	gcloud --project=$(PROJECT_ID) -q iam service-accounts keys delete --iam-account=$(FIREBASE_SA) \
-		$$(jq -r .private_key_id /tmp/istio-auth-test-key.json)
-	rm /tmp/istio-auth-test-key.json
-	! rm /tmp/istio-auth-test.failed 2>/dev/null
-
 test-webui-local: webui/api-client webui/user-svc-client webui/node_modules
 	cd webui && npm run test -- --watch=false --browsers=ChromeHeadless
 
@@ -150,24 +111,11 @@ test-webui-e2e-prod: webui/api-client webui/user-svc-client webui/node_modules
 ## RULES FOR CLOUD DEVELOPMENT
 GCLOUD_BUILD=gcloud --project=$(PROJECT_ID) builds submit $(MACHINE_TYPE) --verbosity=info .
 
-cluster:
-	if ! gcloud --project=$(PROJECT_ID) container clusters describe $(CLUSTER_NAME) --zone $(CLUSTER_LOCATION) 2>&1 > /dev/null; then \
-	  echo creating cluster $(CLUSTER_NAME); \
-	  $(GCLOUD_BUILD) --config cloudbuild-provision-cluster.yaml --substitutions $(call join_subs,$(PROVISION_SUBS)) && \
-	  gcloud --project=$(PROJECT_ID) container clusters get-credentials $(CLUSTER_NAME) --zone $(CLUSTER_LOCATION); \
-	fi
-
-delete-cluster:
-	gcloud --project=$(PROJECT_ID) container clusters delete $(CLUSTER_NAME) --zone $(CLUSTER_LOCATION) --quiet
-
-delete:
-	kubectl delete ns/$(NAMESPACE) --cascade=true
-
-build-webui: cluster
+build-webui:
 	$(GCLOUD_BUILD) --config ./webui/cloudbuild.yaml --substitutions $(call join_subs,$(WEBUI_SUBS))
 
-test-backend:
-	$(GCLOUD_BUILD) --config ./backend/api-service/cloudbuild-test.yaml --substitutions $(call join_subs,$(BACKEND_TEST_SUBS))
+test-apiservice:
+	$(GCLOUD_BUILD) --config ./backend/api-service/cloudbuild-test.yaml --substitutions $(call join_subs,$(API_SVC_TEST_SUBS))
 
 test-istio-auth:
 	$(GCLOUD_BUILD) --config ./istio-auth/cloudbuild-test.yaml --substitutions $(call join_subs,$(ISTIO_AUTH_TEST_SUBS))
@@ -178,17 +126,17 @@ test-webui:
 test-webui-e2e:
 	$(GCLOUD_BUILD) --config ./webui/cypress/cloudbuild.yaml --substitutions $(call join_subs,$(FRONTEND_E2E_SUBS))
 
-build-backend: cluster
-	$(GCLOUD_BUILD) --config ./backend/api-service/cloudbuild.yaml --substitutions $(call join_subs,$(BACKEND_SUBS))
+build-apiservice:
+	$(GCLOUD_BUILD) --config ./backend/api-service/cloudbuild.yaml --substitutions $(call join_subs,$(API_SVC_SUBS))
 
-build-userservice: cluster
+build-userservice:
 	$(GCLOUD_BUILD) --config ./backend/user-service/cloudbuild.yaml --substitutions $(call join_subs,$(USER_SVC_SUBS))
 
-build-infrastructure: cluster
-	$(GCLOUD_BUILD) --config cloudbuild.yaml --substitutions $(call join_subs,$(INFRA_SUBS))
+build-infrastructure:
+	# $(GCLOUD_BUILD) --config cloudbuild.yaml --substitutions $(call join_subs,$(INFRA_SUBS))
 
 build-infra: build-infrastructure
 
-build-all: build-infrastructure build-backend build-userservice build-webui
+build-all: build-infrastructure build-apiservice build-userservice build-webui
 
-test: test-backend test-webui
+test: test-apiservice test-webui
