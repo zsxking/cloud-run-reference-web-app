@@ -4,7 +4,7 @@ resource "google_compute_backend_bucket" "webui_bucket" {
   name        = "webui-backend-bucket"
   description = "Webui app assets"
   bucket_name = google_storage_bucket.webui_bucket.name
-  enable_cdn  = false
+  enable_cdn  = true
 }
 
 resource "google_compute_region_network_endpoint_group" "api_service_neg" {
